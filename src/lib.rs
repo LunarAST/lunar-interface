@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// ---------- Core Data Structures ----------
+// ---------- Core RouteAST Data Structures ----------
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -108,6 +108,39 @@ pub struct InterfaceItem {
     pub target_project: Option<String>,
 }
 
+// ---------- [ADDED v3.0] CI-144 Alignment Data Models ----------
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticNodeSpec {
+    pub name: String,
+    pub r#type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionSpec {
+    pub name: String,
+    pub r#fn: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Ci144Config {
+    pub project: String,
+    pub target: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_nodes: Option<Vec<SemanticNodeSpec>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<ActionSpec>>,
+}
+
 // ---------- Diff & Alignment Logic ----------
 
 #[derive(Debug, PartialEq)]
@@ -155,6 +188,8 @@ pub struct ProjectInfo {
     pub interfaces: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hashes: Option<HashMap<String, String>>, // [MODIFIED v3.0] Multi-target hash storage (e.g. "cellrix" -> hash)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -268,6 +303,7 @@ pub fn generate_lunar_map(
     project_actuals: &HashMap<String, ActualJson>,
     scan_statuses: &HashMap<String, String>,
     project_paths: &HashMap<String, String>,
+    project_hashes: &HashMap<String, HashMap<String, String>>, // [MODIFIED v3.0] Accepts dual-layered multi-target hashes per project
 ) -> LunarMap {
     let mut projects = Vec::new();
     let mut alignments = Vec::new();
@@ -279,7 +315,8 @@ pub fn generate_lunar_map(
             "consumed": actual.consumed.iter().map(|r| serde_json::json!({"path": r.to_path(), "method": r.method, "targetProject": r.target_project.as_deref().unwrap_or("unknown")})).collect::<Vec<_>>(),
         });
         let path = project_paths.get(name).cloned();
-        projects.push(ProjectInfo { name: name.clone(), project_type, sha: "unknown".to_string(), scan_status, interfaces, path });
+        let hashes = project_hashes.get(name).cloned(); // [ADDED v3.0] Extract mapped hashes
+        projects.push(ProjectInfo { name: name.clone(), project_type, sha: "unknown".to_string(), scan_status, interfaces, path, hashes });
     }
     let project_map: HashMap<String, &ActualJson> = project_actuals.iter().map(|(k, v)| (k.clone(), v)).collect();
     let scan_status_map = scan_statuses.clone();
